@@ -1,65 +1,63 @@
 from neo4j import GraphDatabase
 
-# Neo4j Database Configuration
-NEO4J_URI = "bolt://localhost:7687"  
-NEO4J_USERNAME = "neo4j"  
-NEO4J_PASSWORD = "Neoj1234"  
+# Configuration for Neo4j database
+NEO4J_URI = "bolt://localhost:7687"
+NEO4J_USERNAME = "neo4j"
+NEO4J_PASSWORD = "Neoj1234"
 
 # Initialize the Neo4j driver
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
-# Function to store user preferences
-def store_user_preference(user_id, preference_type, preference_value):
+# Function to save user preferences
+def save_user_preference(user_id, preference_category, preference_detail):
     with driver.session() as session:
-        session.write_transaction(_create_preference, user_id, preference_type, preference_value)
+        session.write_transaction(_add_preference, user_id, preference_category, preference_detail)
 
-# Function to create a preference in the database
-def _create_preference(tx, user_id, preference_type, preference_value):
+# Helper function to add preference to the database
+def _add_preference(tx, user_id, preference_category, preference_detail):
     query = """
-    MERGE (u:User {id: $user_id})
-    MERGE (p:Preference {type: $preference_type, value: $preference_value})
-    MERGE (u)-[:PREFERS]->(p)
+    MERGE (user:User {id: $user_id})
+    MERGE (preference:Preference {category: $preference_category, detail: $preference_detail})
+    MERGE (user)-[:HAS_PREFERENCE]->(preference)
     """
-    tx.run(query, user_id=user_id, preference_type=preference_type, preference_value=preference_value)
+    tx.run(query, user_id=user_id, preference_category=preference_category, preference_detail=preference_detail)
 
 # Function to retrieve user preferences
-def get_user_preferences(user_id):
+def fetch_user_preferences(user_id):
     with driver.session() as session:
-        result = session.read_transaction(_fetch_preferences, user_id)
-        return result
+        return session.read_transaction(_retrieve_preferences, user_id)
 
-# Function to fetch preferences from the database
-def _fetch_preferences(tx, user_id):
+# Helper function to retrieve preferences from the database
+def _retrieve_preferences(tx, user_id):
     query = """
-    MATCH (u:User {id: $user_id})-[:PREFERS]->(p:Preference)
-    RETURN p.type AS type, p.value AS value
+    MATCH (user:User {id: $user_id})-[:HAS_PREFERENCE]->(preference:Preference)
+    RETURN preference.category AS category, preference.detail AS detail
     """
     result = tx.run(query, user_id=user_id)
-    preferences = [{"type": record["type"], "value": record["value"]} for record in result]
-    return preferences
+    return [{"category": record["category"], "detail": record["detail"]} for record in result]
 
 # Example usage
 if __name__ == "__main__":
-    # Sample user ID
+    # Example user ID
     user_id = "user123"
 
-    # Storing preferences
-    preferences_to_store = [
-        {"type": "Activity", "value": "Historical Sites"},
-        {"type": "Food", "value": "Italian Cuisine"},
-        {"type": "Budget", "value": "Moderate"}
+    # Preferences to save
+    user_preferences_list = [
+        {"category": "Activity", "detail": "Historical Sites"},
+        {"category": "Food", "detail": "Italian Cuisine"},
+        {"category": "Budget", "detail": "Moderate"}
     ]
 
-    for pref in preferences_to_store:
-        store_user_preference(user_id, pref["type"], pref["value"])
+    for preference in user_preferences_list:
+        save_user_preference(user_id, preference["category"], preference["detail"])
 
-    print("User preferences have been stored successfully!")
+    print("User preferences have been successfully saved!")
 
-    # Retrieving preferences for the next chat
-    user_preferences = get_user_preferences(user_id)
-    print("Retrieved user preferences for the next chat:")
-    for pref in user_preferences:
-        print(f"{pref['type']}: {pref['value']}")
+    # Fetch and display preferences for further use
+    retrieved_preferences = fetch_user_preferences(user_id)
+    print("Retrieved user preferences for the next interaction:")
+    for preference in retrieved_preferences:
+        print(f"{preference['category']}: {preference['detail']}")
 
-# Close the Neo4j driver
+# Close the Neo4j driver when done
 driver.close()
